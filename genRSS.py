@@ -610,13 +610,17 @@ def main(argv=None):
         else:
             outfp = sys.stdout
 
+        channelLink = link;
+        if opts.link is not None:
+            channelLink = opts.link
+
         outfp.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         outfp.write('<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">\n')
         outfp.write('   <channel>\n')
         outfp.write('      <atom:link href="{0}" rel="self" type="application/rss+xml" />\n'.format(link))
         outfp.write('      <title>{0}</title>\n'.format(saxutils.escape(title)))
         outfp.write('      <description>{0}</description>\n'.format(description))
-        outfp.write('      <link>{0}</link>\n'.format(link))
+        outfp.write('      <link>{0}</link>\n'.format(channelLink))
 
         if opts.image is not None:
             if opts.image.lower().startswith("http://") or opts.image.lower().startswith("https://"):
@@ -627,7 +631,7 @@ def main(argv=None):
             outfp.write("      <image>\n")
             outfp.write("         <url>{0}</url>\n".format(imgurl))
             outfp.write("         <title>{0}</title>\n".format(saxutils.escape(title)))
-            outfp.write("         <link>{0}</link>\n".format(link))
+            outfp.write("         <link>{0}</link>\n".format(channelLink))
             outfp.write("      </image>\n")
 
         if opts.author is not None:
