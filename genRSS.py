@@ -12,6 +12,7 @@ genRSS -- generate a RSS 2 feed from media files in a directory.
 
 import sys
 import os
+import re
 import glob
 import fnmatch
 import time
@@ -338,7 +339,7 @@ def getTitle(filename, use_metadata=False):
     return title
 
 
-def fileToItem(host, fname, pubDate, use_metadata=False):
+def fileToItem(host, fname, pubDate, use_metadata=False, staticLink=None, externalDescriptions=None):
     '''
     Inspect a file name to determine what kind of RSS item to build, and
     return the built item.
@@ -416,9 +417,30 @@ def fileToItem(host, fname, pubDate, use_metadata=False):
 
     title = getTitle(fname, use_metadata)
 
-    return buildItem(link=fileURL, title=title,
+    match = re.match(r"^.*?\/?([^\/]+?)((\s+-\s+)|\s)\d+wpm\.mp3$", fname)
+    externalDescription = None
+    if match:
+        baseFilename = match.group(1)
+        #print("... " + fname + " -> '" + match.group(1) + "'")
+        if baseFilename in externalDescriptions:
+            externalDescription = externalDescriptions[baseFilename]
+        else:
+            print("---> Didn't find fname: " + fname)
+    else:
+        print("---> Didn't find fname: "+fname)
+
+    link2Use = fileURL
+    if staticLink is not None:
+        link2Use = staticLink
+
+    if externalDescription is None:
+        return buildItem(link=link2Use, title=title,
                      guid=fileURL, description=title,
                      pubDate=pubDate, extraTags=[enclosure])
+    else:
+        return buildItem(link=link2Use, title=title,
+                         guid=fileURL, description=externalDescription,
+                         pubDate=pubDate, extraTags=[enclosure])
 
 
 def main(argv=None):
@@ -438,6 +460,14 @@ def main(argv=None):
 
         parser = argparse.ArgumentParser(usage=program_usage, description=program_longdesc,
                                             formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("-a", "--author", dest="author", help="Podcast author [default: None]")
+        parser.add_argument("-m", "--email", dest="email", help="Podcast email [default: None]")
+        parser.add_argument("-x", "--external-descriptions", dest="externalDescriptions",
+                            help="File containing external descriptions for each media file.\n"
+                                 "Format is:\n\n"
+                                 "'^^^base-filename^^^\n"
+                                 "one or more lines of description.\n")
+        parser.add_argument("-l", "--link", dest="link", help="Static link for each episode.\n")
         parser.add_argument("-d", "--dirname", dest="dirname",
                             help="Directory to look for media files in.\n"
                                 "This directory name will be appended to the host name\n"
@@ -518,6 +548,9 @@ def main(argv=None):
         if opts.description is not None:
             description = opts.description
 
+        author = opts.author
+        email = opts.email
+
         # get the list of the desired files
         if opts.extensions is not None:
             opts.extensions = [e for e in  opts.extensions.split(",") if e != ""]
@@ -547,8 +580,26 @@ def main(argv=None):
         # write dates in RFC-822 format
         sortedFiles = ((f[0], time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime(f[1]))) for f in sortedFiles)
 
-        # build items
-        items = [fileToItem(host, fname, pubDate, opts.use_metadata) for fname, pubDate in sortedFiles]
+        # if specified, load external descriptions
+        itemDescriptions = {}
+        if opts.externalDescriptions is not None:
+            inDescriptions = open(opts.externalDescriptions, 'r')
+            lines = inDescriptions.readlines()
+
+            currentItem = "Unknown"
+            currentDescription = ""
+            for line in lines:
+                match = re.match(r"\^\^\^(.*?)\^\^\^", line)
+                if match:
+                    itemDescriptions[currentItem] = currentDescription
+                    currentDescription = ""
+                    currentItem = match.group(1)
+                    currentItem = currentItem.replace('/',':')
+                    #print("Line: {}".format(currentItem))
+                else:
+                    currentDescription = currentDescription + line
+
+        items = [fileToItem(host, fname, pubDate, opts.use_metadata, opts.link, itemDescriptions) for fname, pubDate in sortedFiles]
 
         if opts.outfile is not None:
             outfp = open(opts.outfile,"w")
@@ -556,7 +607,7 @@ def main(argv=None):
             outfp = sys.stdout
 
         outfp.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-        outfp.write('<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n')
+        outfp.write('<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">\n')
         outfp.write('   <channel>\n')
         outfp.write('      <atom:link href="{0}" rel="self" type="application/rss+xml" />\n'.format(link))
         outfp.write('      <title>{0}</title>\n'.format(saxutils.escape(title)))
@@ -574,6 +625,15 @@ def main(argv=None):
             outfp.write("         <title>{0}</title>\n".format(saxutils.escape(title)))
             outfp.write("         <link>{0}</link>\n".format(link))
             outfp.write("      </image>\n")
+
+        if opts.author is not None:
+            outfp.write("      <itunes:author>{0}</itunes:author>\n".format(author))
+
+        if opts.author is not None and opts.email is not None:
+            outfp.write("      <itunes:owner>\n")
+            outfp.write("         <itunes:name>{0}</itunes:name>\n".format(author))
+            outfp.write("         <itunes:email>{0}</itunes:email>\n".format(email))
+            outfp.write("      </itunes:owner>\n")
 
         for item in items:
             outfp.write(item + "\n")
