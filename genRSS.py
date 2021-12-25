@@ -303,6 +303,7 @@ def getTitle(filename, use_metadata=False):
             if meta and meta.tag is not None:
                 return meta.tag.title
         except ImportError:
+            print("error: eyed3 not installed")
             pass
 
         try:
@@ -425,9 +426,11 @@ def fileToItem(host, fname, pubDate, use_metadata=False, staticLink=None, extern
         if baseFilename in externalDescriptions:
             externalDescription = externalDescriptions[baseFilename]
         else:
-            print("---> Didn't find fname: " + fname)
+            if len(externalDescriptions) > 0:
+                print("---> Didn't find fname: " + fname)
     else:
-        print("---> Didn't find fname: "+fname)
+        if len(externalDescriptions) > 0:
+            print("---> Didn't find fname: "+fname)
 
     link2Use = fileURL
     if staticLink is not None:
@@ -598,6 +601,7 @@ def main(argv=None):
                     #print("Line: {}".format(currentItem))
                 else:
                     currentDescription = currentDescription + line
+
 
         items = [fileToItem(host, fname, pubDate, opts.use_metadata, opts.link, itemDescriptions) for fname, pubDate in sortedFiles]
 
